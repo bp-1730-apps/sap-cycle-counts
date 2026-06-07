@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="refresh" content="0; url=login.html">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
   <title>Novus Cycle Count</title>
 </head>
-<body></body>
+<body>
+  <script>
+    // If this is an invite/reset link (has access_token in hash), go to reset page
+    if (window.location.hash.includes('access_token')) {
+      window.location.href = 'reset.html' + window.location.hash;
+    } else {
+      window.location.href = 'login.html';
+    }
+  </script>
+</body>
 </html>
