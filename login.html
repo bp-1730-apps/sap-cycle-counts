@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Cycle Count — Login</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body {
+      display: flex; align-items: center;
+      justify-content: center; min-height: 100dvh; padding: 24px;
+    }
+
+    .login-wrap {
+      width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; gap: 24px;
+    }
+
+    .brand { text-align: center; }
+
+    .brand-eyebrow {
+      font-family: var(--font-mono); font-size: 0.65rem;
+      color: var(--green); letter-spacing: 0.2em;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+
+    .brand-name {
+      font-family: var(--font-display); font-size: 2rem;
+      font-weight: 700; letter-spacing: 0.06em; color: var(--text);
+    }
+
+    .brand-sub {
+      font-family: var(--font-mono); font-size: 0.7rem;
+      color: var(--text-3); letter-spacing: 0.08em; margin-top: 4px;
+    }
+
+    .login-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 24px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+
+    .plant-tag {
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px; font-family: var(--font-mono);
+      font-size: 0.65rem; color: var(--text-3); letter-spacing: 0.08em;
+    }
+
+    .plant-tag::before, .plant-tag::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+
+    <div class="brand">
+      <div class="brand-eyebrow">Novus Foods · Plant 1730</div>
+      <div class="brand-name">CYCLE COUNT</div>
+      <div class="brand-sub">Inventory Control System</div>
+    </div>
+
+    <div class="login-card">
+      <div class="field">
+        <label>Email <span class="required">*</span></label>
+        <input type="email" id="email" placeholder="you@novusfoods.com" autocomplete="email">
+      </div>
+      <div class="field">
+        <label>Password <span class="required">*</span></label>
+        <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div id="error-msg" class="error-box hidden"></div>
+      <button class="btn btn-primary" id="login-btn" onclick="handleLogin()">Sign In</button>
+    </div>
+
+    <div class="plant-tag">Buena Park, CA · EWM Plant 1730</div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script>
+    // Redirect if already logged in
+    (async () => {
+      const { data: { session } } = await db.auth.getSession();
+      if (session) window.location.href = 'sessions.html';
+    })();
+
+    async function handleLogin() {
+      const email    = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const btn      = document.getElementById('login-btn');
+      const errEl    = document.getElementById('error-msg');
+
+      errEl.classList.add('hidden');
+
+      if (!email || !password) {
+        errEl.textContent = 'Email and password are required.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Signing in...';
+
+      const { error } = await db.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        errEl.textContent = 'Invalid credentials. Please try again.';
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In';
+        return;
+      }
+
+      window.location.href = 'sessions.html';
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); });
+  </script>
+</body>
+</html>
