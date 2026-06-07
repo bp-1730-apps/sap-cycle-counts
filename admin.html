@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Cycle Count — Admin</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .user-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 14px 16px; background: var(--bg-2);
+      border: 1px solid var(--border); border-radius: var(--r);
+    }
+    .user-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--bg-3); border: 1px solid var(--border-hi);
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--font-display); font-size: 0.9rem;
+      font-weight: 700; color: var(--green); flex-shrink: 0;
+    }
+    .user-info  { flex: 1; min-width: 0; }
+    .user-name  { font-size: 0.9rem; font-weight: 500; color: var(--text); }
+    .user-email { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-3); margin-top: 2px; }
+
+    .entry-row { padding: 12px 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+    .entry-row:last-child { border-bottom: none; }
+    .entry-header { display: flex; justify-content: space-between; align-items: center; }
+    .entry-bin  { font-family: var(--font-mono); font-size: 0.85rem; color: var(--text); }
+    .entry-meta { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-3); }
+
+    .qty-compare { display: flex; gap: 12px; font-family: var(--font-mono); font-size: 0.75rem; }
+    .qty-expected { color: var(--text-3); }
+    .qty-actual   { color: var(--text); font-weight: 500; }
+    .qty-diff-pos { color: var(--green); }
+    .qty-diff-neg { color: var(--red); }
+
+    #tab-users-content,
+    #tab-entries-content { display: none; }
+    #tab-users-content.active,
+    #tab-entries-content.active { display: flex; flex-direction: column; gap: 8px; }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Admin</div>
+        <div class="topbar-sub">Plant 1730 · IC Lead</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="signOut()">Sign Out</button>
+    </div>
+
+    <div class="content">
+
+      <div class="stat-row">
+        <div class="stat"><div class="stat-value" id="stat-users">—</div><div class="stat-label">Users</div></div>
+        <div class="stat"><div class="stat-value" id="stat-entries">—</div><div class="stat-label">Entries</div></div>
+        <div class="stat"><div class="stat-value" id="stat-failed">—</div><div class="stat-label">SAP Fails</div></div>
+      </div>
+
+      <div class="tab-row">
+        <button class="tab active" id="tab-users-btn"   onclick="switchTab('users')">Users</button>
+        <button class="tab"        id="tab-entries-btn" onclick="switchTab('entries')">Entries</button>
+      </div>
+
+      <div id="tab-users-content" class="active">
+        <button class="btn btn-primary" onclick="openCreateUser()">+ Create User</button>
+        <div id="users-list">
+          <div class="empty"><div class="empty-icon">👤</div>Loading users...</div>
+        </div>
+      </div>
+
+      <div id="tab-entries-content">
+        <div class="card">
+          <div class="card-label">All Count Entries</div>
+          <div id="entries-list"><div class="empty">Loading...</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Create User Modal -->
+  <div class="modal-overlay hidden" id="create-user-modal">
+    <div class="modal">
+      <div class="modal-title">Create User</div>
+
+      <div class="field">
+        <label>Full Name <span class="required">*</span></label>
+        <input type="text" id="new-name" placeholder="Jane Smith">
+      </div>
+      <div class="field">
+        <label>Email <span class="required">*</span></label>
+        <input type="email" id="new-email" placeholder="jane@novusfoods.com">
+      </div>
+      <div class="field">
+        <label>Temporary Password <span class="required">*</span></label>
+        <input type="text" id="new-password" placeholder="min. 8 characters">
+      </div>
+
+      <div id="create-error" class="error-box hidden"></div>
+
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="closeCreateUser()">Cancel</button>
+        <button class="btn btn-primary"   id="create-user-btn" onclick="createUser()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script>
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      loadUsers();
+      loadEntries();
+    })();
+
+    function switchTab(tab) {
+      document.getElementById('tab-users-btn').classList.toggle('active',   tab === 'users');
+      document.getElementById('tab-entries-btn').classList.toggle('active', tab === 'entries');
+      document.getElementById('tab-users-content').classList.toggle('active',   tab === 'users');
+      document.getElementById('tab-entries-content').classList.toggle('active', tab === 'entries');
+    }
+
+    async function loadUsers() {
+      const { data, error } = await db.from('profiles').select('*').order('full_name');
+      document.getElementById('stat-users').textContent = data?.length ?? '—';
+
+      if (error || !data?.length) {
+        document.getElementById('users-list').innerHTML = '<div class="empty"><div class="empty-icon">👤</div>No users yet.</div>';
+        return;
+      }
+
+      document.getElementById('users-list').innerHTML = data.map(u => `
+        <div class="user-row">
+          <div class="user-avatar">${u.full_name.charAt(0).toUpperCase()}</div>
+          <div class="user-info">
+            <div class="user-name">${u.full_name}</div>
+            <div class="user-email">${u.id}</div>
+          </div>
+        </div>`).join('');
+    }
+
+    async function loadEntries() {
+      const { data, error } = await db
+        .from('entry_detail')
+        .select('*')
+        .order('submitted_at', { ascending: false })
+        .limit(100);
+
+      const failed = data?.filter(e => e.sap_status === 'failed').length ?? 0;
+      document.getElementById('stat-entries').textContent = data?.length ?? '—';
+      document.getElementById('stat-failed').textContent  = failed;
+
+      if (error || !data?.length) {
+        document.getElementById('entries-list').innerHTML = '<div class="empty" style="padding:16px 0;">No entries yet.</div>';
+        return;
+      }
+
+      document.getElementById('entries-list').innerHTML = data.map(e => {
+        const diff      = e.actual_qty - e.expected_qty;
+        const diffClass = diff > 0 ? 'qty-diff-pos' : diff < 0 ? 'qty-diff-neg' : 'qty-expected';
+        const diffStr   = diff > 0 ? `+${diff}` : `${diff}`;
+
+        return `
+          <div class="entry-row">
+            <div class="entry-header">
+              <span class="entry-bin">${e.bin}</span>
+              <span class="badge badge-${e.sap_status}">${e.sap_status}</span>
+            </div>
+            <div class="qty-compare">
+              <span class="qty-expected">EXP: ${e.expected_qty ?? '—'}</span>
+              <span class="qty-actual">ACT: ${e.actual_qty}</span>
+              ${e.expected_qty != null ? `<span class="${diffClass}">${diffStr}</span>` : ''}
+              ${e.flagged ? '<span style="color:var(--yellow);">⚠ FLAGGED</span>' : ''}
+            </div>
+            <div class="entry-meta">
+              ${e.counted_by_name || 'Unknown'} · Attempt #${e.attempt_number} · ${formatDate(e.submitted_at)}
+            </div>
+            ${e.pi_doc_number ? `<div class="entry-meta mono">PI: ${e.pi_doc_number} · WO: ${e.wo_number || '—'}</div>` : ''}
+            ${e.note       ? `<div class="entry-meta" style="color:var(--text-2);">"${e.note}"</div>` : ''}
+            ${e.sap_error  ? `<div class="entry-meta" style="color:var(--red);">Error: ${e.sap_error}</div>` : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function openCreateUser() {
+      document.getElementById('new-name').value     = '';
+      document.getElementById('new-email').value    = '';
+      document.getElementById('new-password').value = '';
+      document.getElementById('create-error').classList.add('hidden');
+      document.getElementById('create-user-modal').classList.remove('hidden');
+    }
+
+    function closeCreateUser() {
+      document.getElementById('create-user-modal').classList.add('hidden');
+    }
+
+    async function createUser() {
+      const name     = document.getElementById('new-name').value.trim();
+      const email    = document.getElementById('new-email').value.trim();
+      const password = document.getElementById('new-password').value;
+      const errEl    = document.getElementById('create-error');
+      const btn      = document.getElementById('create-user-btn');
+
+      errEl.classList.add('hidden');
+
+      if (!name || !email || !password) {
+        errEl.textContent = 'All fields are required.';
+        errEl.classList.remove('hidden'); return;
+      }
+      if (password.length < 8) {
+        errEl.textContent = 'Password must be at least 8 characters.';
+        errEl.classList.remove('hidden'); return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Creating...';
+
+      const { error } = await db.auth.signUp({
+        email, password,
+        options: { data: { full_name: name } }
+      });
+
+      if (error) {
+        errEl.textContent = error.message;
+        errEl.classList.remove('hidden');
+        btn.disabled = false; btn.innerHTML = 'Create'; return;
+      }
+
+      toast(`User created: ${name}`, 'success');
+      closeCreateUser();
+      loadUsers();
+      btn.disabled = false; btn.innerHTML = 'Create';
+    }
+
+    async function signOut() {
+      await db.auth.signOut();
+      window.location.href = 'login.html';
+    }
+  </script>
+</body>
+</html>
