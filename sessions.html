@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Cycle Count — Sessions</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .session-card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 16px;
+      display: flex; flex-direction: column; gap: 10px;
+      cursor: pointer; transition: border-color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .session-card:active { border-color: var(--border-hi); }
+    .session-card.open   { border-left: 3px solid var(--green); }
+    .session-card.closed { opacity: 0.55; }
+
+    .session-header {
+      display: flex; align-items: flex-start;
+      justify-content: space-between; gap: 8px;
+    }
+
+    .session-reason {
+      font-size: 0.95rem; font-weight: 500;
+      color: var(--text); line-height: 1.3; flex: 1;
+    }
+
+    .session-meta {
+      font-family: var(--font-mono); font-size: 0.68rem;
+      color: var(--text-3); display: flex; flex-direction: column; gap: 3px;
+    }
+
+    .progress-bar-wrap { height: 4px; background: var(--bg-3); border-radius: 2px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.4s ease; }
+    .progress-label    { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-3); letter-spacing: 0.06em; }
+
+    .search-result-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; background: var(--bg-3);
+      border: 1px solid var(--border); border-radius: var(--r);
+      cursor: pointer; transition: border-color 0.15s;
+    }
+    .search-result-row:active   { border-color: var(--green); }
+    .search-result-row.selected { border-color: var(--green); background: var(--green-glow); }
+
+    .result-bin  { font-family: var(--font-mono); font-size: 0.85rem; color: var(--text); }
+    .result-desc { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-3); margin-top: 2px; }
+
+    .selected-bins-list { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+
+    .selected-bin-tag {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 10px; background: var(--green-glow);
+      border: 1px solid var(--green-dim); border-radius: 6px;
+      font-family: var(--font-mono); font-size: 0.75rem; color: var(--green);
+    }
+
+    .remove-bin {
+      background: none; border: none; color: var(--text-3);
+      cursor: pointer; font-size: 1rem; padding: 0 4px; line-height: 1;
+    }
+
+    #search-results { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+
+  <div class="page">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Count Sessions</div>
+        <div class="topbar-sub" id="user-name">—</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="signOut()">Sign Out</button>
+    </div>
+
+    <div class="content">
+
+      <div class="stat-row">
+        <div class="stat"><div class="stat-value" id="stat-open">—</div><div class="stat-label">Open</div></div>
+        <div class="stat"><div class="stat-value" id="stat-closed">—</div><div class="stat-label">Closed</div></div>
+        <div class="stat"><div class="stat-value" id="stat-bins">—</div><div class="stat-label">Total Bins</div></div>
+      </div>
+
+      <button class="btn btn-primary" onclick="openNewSessionModal()">+ New Count Session</button>
+
+      <div id="sessions-list">
+        <div class="empty"><div class="empty-icon">📋</div>Loading sessions...</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- New Session Modal -->
+  <div class="modal-overlay hidden" id="new-session-modal">
+    <div class="modal">
+      <div class="modal-title">New Count Session</div>
+
+      <div class="field">
+        <label>Reason for count <span class="required">*</span></label>
+        <textarea id="session-reason" placeholder="e.g. Monthly scheduled count, discrepancy investigation, audit prep..." rows="3"></textarea>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="tab-row">
+        <button class="tab active" id="tab-bin"     onclick="switchTab('bin')">By Bin</button>
+        <button class="tab"        id="tab-product" onclick="switchTab('product')">By Product</button>
+      </div>
+
+      <div class="field">
+        <label id="search-label">Bin Number <span class="required">*</span></label>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="search-input" placeholder="e.g. WH-A-01-01" style="flex:1;">
+          <button class="btn btn-secondary btn-sm" onclick="runSearch()">Search</button>
+        </div>
+      </div>
+
+      <div id="search-results"></div>
+
+      <div id="selected-bins-wrap" class="hidden">
+        <div class="card-label">Selected Bins</div>
+        <div class="selected-bins-list" id="selected-bins-list"></div>
+      </div>
+
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="closeNewSessionModal()">Cancel</button>
+        <button class="btn btn-primary"   id="create-session-btn" onclick="createSession()">Create Session</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script>
+    let currentProfile = null;
+    let searchTab      = 'bin';
+    let selectedBins   = [];
+
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      currentProfile = await getCurrentProfile();
+      document.getElementById('user-name').textContent = currentProfile?.full_name || session.user.email;
+      loadSessions();
+    })();
+
+    async function loadSessions() {
+      const { data, error } = await db
+        .from('session_summary')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) { toast('Failed to load sessions', 'error'); return; }
+
+      const open   = data.filter(s => s.status === 'open').length;
+      const closed = data.filter(s => s.status === 'closed').length;
+      const bins   = data.reduce((acc, s) => acc + (s.total_bins || 0), 0);
+
+      document.getElementById('stat-open').textContent   = open;
+      document.getElementById('stat-closed').textContent = closed;
+      document.getElementById('stat-bins').textContent   = bins;
+
+      const list = document.getElementById('sessions-list');
+
+      if (!data.length) {
+        list.innerHTML = `<div class="empty"><div class="empty-icon">📋</div>No sessions yet. Create one above.</div>`;
+        return;
+      }
+
+      list.innerHTML = data.map(s => {
+        const pct = s.total_bins > 0 ? Math.round((s.completed_bins / s.total_bins) * 100) : 0;
+        return `
+          <div class="session-card ${s.status}" onclick="goToSession('${s.id}')">
+            <div class="session-header">
+              <div class="session-reason">${s.reason}</div>
+              <span class="badge badge-${s.status}">${s.status}</span>
+            </div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" style="width:${pct}%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span class="progress-label">${s.completed_bins}/${s.total_bins} bins complete</span>
+              <span class="progress-label">${pct}%</span>
+            </div>
+            <div class="session-meta">
+              <span>By ${s.created_by_name || 'Unknown'}</span>
+              <span>${formatDate(s.created_at)}</span>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function goToSession(id) { window.location.href = `count.html?session=${id}`; }
+
+    function openNewSessionModal() {
+      selectedBins = [];
+      document.getElementById('session-reason').value = '';
+      document.getElementById('search-input').value   = '';
+      document.getElementById('search-results').innerHTML = '';
+      renderSelectedBins();
+      document.getElementById('new-session-modal').classList.remove('hidden');
+    }
+
+    function closeNewSessionModal() {
+      document.getElementById('new-session-modal').classList.add('hidden');
+    }
+
+    function switchTab(tab) {
+      searchTab = tab;
+      document.getElementById('tab-bin').classList.toggle('active',     tab === 'bin');
+      document.getElementById('tab-product').classList.toggle('active', tab === 'product');
+      document.getElementById('search-label').innerHTML =
+        tab === 'bin' ? 'Bin Number <span class="required">*</span>'
+                      : 'Material / Product Number <span class="required">*</span>';
+      document.getElementById('search-input').placeholder =
+        tab === 'bin' ? 'e.g. WH-A-01-01' : 'e.g. 1000234';
+      document.getElementById('search-results').innerHTML = '';
+    }
+
+    async function runSearch() {
+      const query = document.getElementById('search-input').value.trim();
+      if (!query) { toast('Enter a bin or material number', 'info'); return; }
+
+      const resultsEl = document.getElementById('search-results');
+      resultsEl.innerHTML = `<div style="display:flex;gap:8px;align-items:center;padding:8px 0;">
+        <div class="spinner"></div>
+        <span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--text-3);">Searching SAP...</span>
+      </div>`;
+
+      let results = [];
+
+      if (searchTab === 'product') {
+        results = await SAP.getBinsByMaterial(query);
+      } else {
+        results = [{ bin: query.toUpperCase(), material_number: '—', material_desc: 'Bin queued — live data pulled on confirmation', expected_qty: null, uom: '—' }];
+      }
+
+      if (!results.length) {
+        resultsEl.innerHTML = '<div class="empty" style="padding:16px 0;">No results found in SAP.</div>';
+        return;
+      }
+
+      resultsEl.innerHTML = results.map((r, i) => {
+        const selected = selectedBins.some(b => b.bin === r.bin);
+        const encoded  = encodeURIComponent(JSON.stringify(r));
+        return `
+          <div class="search-result-row ${selected ? 'selected' : ''}" id="result-${i}" onclick="toggleBin(${i}, '${encoded}')">
+            <div style="flex:1;">
+              <div class="result-bin">${r.bin}</div>
+              <div class="result-desc">${r.material_number !== '—' ? r.material_number + ' · ' : ''}${r.material_desc}</div>
+            </div>
+            <span style="font-family:var(--font-mono);font-size:0.75rem;color:var(--green);">${selected ? '✓' : '+'}</span>
+          </div>`;
+      }).join('');
+    }
+
+    function toggleBin(index, encoded) {
+      const binData  = JSON.parse(decodeURIComponent(encoded));
+      const existing = selectedBins.findIndex(b => b.bin === binData.bin);
+
+      if (existing >= 0) { selectedBins.splice(existing, 1); }
+      else               { selectedBins.push(binData); }
+
+      renderSelectedBins();
+
+      const row = document.getElementById(`result-${index}`);
+      if (row) {
+        const isSelected = selectedBins.some(b => b.bin === binData.bin);
+        row.classList.toggle('selected', isSelected);
+        row.querySelector('span:last-child').textContent = isSelected ? '✓' : '+';
+      }
+    }
+
+    function removeSelectedBin(bin) {
+      selectedBins = selectedBins.filter(b => b.bin !== bin);
+      renderSelectedBins();
+    }
+
+    function renderSelectedBins() {
+      const wrap = document.getElementById('selected-bins-wrap');
+      const list = document.getElementById('selected-bins-list');
+
+      if (!selectedBins.length) { wrap.classList.add('hidden'); return; }
+
+      wrap.classList.remove('hidden');
+      list.innerHTML = selectedBins.map(b => `
+        <div class="selected-bin-tag">
+          <span>${b.bin}${b.material_number !== '—' ? ' · ' + b.material_number : ''}</span>
+          <button class="remove-bin" onclick="removeSelectedBin('${b.bin}')">×</button>
+        </div>`).join('');
+    }
+
+    async function createSession() {
+      const reason = document.getElementById('session-reason').value.trim();
+      if (!reason)           { toast('Reason is required', 'error');      return; }
+      if (!selectedBins.length) { toast('Add at least one bin', 'error'); return; }
+
+      const btn = document.getElementById('create-session-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Creating...';
+
+      const { data: session, error: sessionErr } = await db
+        .from('sessions')
+        .insert({ reason, created_by: currentProfile.id, status: 'open' })
+        .select()
+        .single();
+
+      if (sessionErr) {
+        toast('Failed to create session', 'error');
+        btn.disabled = false; btn.innerHTML = 'Create Session';
+        return;
+      }
+
+      const binRows = selectedBins.map(b => ({
+        session_id:      session.id,
+        bin:             b.bin,
+        material_number: b.material_number,
+        search_type:     searchTab,
+        status:          'queued',
+        queued_by:       currentProfile.id,
+      }));
+
+      const { error: binErr } = await db.from('session_bins').insert(binRows);
+
+      if (binErr) { toast('Session created but bins failed to save', 'error'); }
+      else        { toast(`Session created · ${selectedBins.length} bin(s) queued`, 'success'); closeNewSessionModal(); loadSessions(); }
+
+      btn.disabled = false; btn.innerHTML = 'Create Session';
+    }
+
+    async function signOut() {
+      await db.auth.signOut();
+      window.location.href = 'login.html';
+    }
+  </script>
+</body>
+</html>
