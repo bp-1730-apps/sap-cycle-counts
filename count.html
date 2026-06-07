@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Cycle Count — Count</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .bin-list { display: flex; flex-direction: column; gap: 8px; }
+
+    /* Full-screen count panel */
+    .count-panel {
+      position: fixed; inset: 0; background: var(--bg);
+      z-index: 50; display: flex; flex-direction: column;
+      overflow-y: auto; animation: panel-in 0.22s ease;
+    }
+    @keyframes panel-in {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .panel-topbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      background: var(--bg-2); position: sticky; top: 0;
+    }
+    .back-btn { background: none; border: none; color: var(--text-2); font-size: 1.3rem; cursor: pointer; padding: 4px; line-height: 1; }
+    .panel-content { padding: 20px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+
+    /* Bin detail card */
+    .bin-detail-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+    .bin-detail-header {
+      background: var(--bg-3); border-bottom: 1px solid var(--border);
+      padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .bin-location-big { font-family: var(--font-mono); font-size: 1.1rem; font-weight: 500; color: var(--text); }
+    .bin-detail-body  { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .detail-row       { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .detail-key       { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; }
+    .detail-val       { font-family: var(--font-mono); font-size: 0.88rem; color: var(--text); text-align: right; }
+
+    .expected-qty-big { font-family: var(--font-display); font-size: 2.4rem; font-weight: 700; color: var(--text); text-align: center; padding: 8px 0; line-height: 1; }
+    .expected-label   { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-3); text-align: center; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 2px; }
+
+    /* Actual qty input */
+    .qty-input-wrap { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .qty-input-big {
+      width: 100%; background: var(--bg-3); border: 2px solid var(--border-hi);
+      border-radius: var(--r-lg); color: var(--text);
+      font-family: var(--font-display); font-size: 3rem; font-weight: 700;
+      text-align: center; padding: 16px; outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s; -webkit-appearance: none;
+    }
+    .qty-input-big:focus { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-glow); }
+    .qty-label { font-family: var(--font-mono); font-size: 0.68rem; color: var(--text-3); letter-spacing: 0.1em; text-transform: uppercase; }
+
+    /* Flag toggle */
+    .flag-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--r); cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .flag-toggle.flagged { border-color: var(--yellow); background: rgba(245,166,35,0.05); }
+    .flag-label { font-family: var(--font-body); font-size: 0.9rem; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+    .flag-toggle.flagged .flag-label { color: var(--yellow); }
+    .toggle-pill { width: 40px; height: 22px; background: var(--bg-3); border: 1px solid var(--border-hi); border-radius: 11px; position: relative; transition: background 0.2s; }
+    .flag-toggle.flagged .toggle-pill { background: var(--yellow); border-color: var(--yellow); }
+    .toggle-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: var(--text-3); border-radius: 50%; transition: transform 0.2s, background 0.2s; }
+    .flag-toggle.flagged .toggle-thumb { transform: translateX(18px); background: #000; }
+
+    /* Confirm screen */
+    .confirm-screen {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px; padding: 40px 20px; text-align: center;
+    }
+    .confirm-icon  { font-size: 3rem; }
+    .confirm-title { font-family: var(--font-display); font-size: 1.5rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .confirm-bin   { font-family: var(--font-mono); font-size: 1rem; color: var(--green); letter-spacing: 0.08em; }
+    .confirm-sub   { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-3); letter-spacing: 0.06em; line-height: 1.6; }
+
+    /* SAP overlay */
+    .sap-overlay {
+      position: fixed; inset: 0; background: rgba(8,11,15,0.92);
+      z-index: 200; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; padding: 40px;
+    }
+    .sap-status-text { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; text-align: center; }
+    .sap-status-sub  { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-3); letter-spacing: 0.06em; text-align: center; }
+    .sap-doc         { font-family: var(--font-mono); font-size: 0.8rem; color: var(--green); letter-spacing: 0.06em; text-align: center; }
+
+    /* History */
+    .history-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 0.75rem; }
+    .history-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+
+  <div class="page" id="main-page">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title">Count Session</div>
+        <div class="topbar-sub" id="session-progress">—</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="goBack()">← Back</button>
+    </div>
+
+    <div class="content">
+      <div class="card">
+        <div class="card-label">Reason</div>
+        <div id="session-reason" style="font-size:0.9rem;color:var(--text-2);line-height:1.4;">—</div>
+      </div>
+      <div class="card-label" style="padding:0 2px;">Bins to Count</div>
+      <div class="bin-list" id="bin-list">
+        <div class="empty"><div class="empty-icon">📦</div>Loading bins...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Count Panel -->
+  <div class="count-panel hidden" id="count-panel">
+    <div class="panel-topbar">
+      <button class="back-btn" onclick="closeCountPanel()">←</button>
+      <div>
+        <div class="topbar-title" id="panel-bin-title">—</div>
+        <div class="topbar-sub"   id="panel-bin-status">—</div>
+      </div>
+    </div>
+
+    <!-- Step 1: Confirm presence -->
+    <div class="confirm-screen" id="confirm-screen">
+      <div class="confirm-icon">📍</div>
+      <div class="confirm-title">Go to this bin</div>
+      <div class="confirm-bin" id="confirm-bin-label">—</div>
+      <div class="confirm-sub" id="confirm-material-label">—</div>
+      <div class="confirm-sub">
+        When you are physically standing<br>at this bin, tap the button below.<br><br>
+        This will pull live data from SAP<br>and create the PI document.
+      </div>
+      <button class="btn btn-primary"   id="confirm-btn" onclick="confirmAtBin()" style="width:100%;max-width:320px;">I'm at this bin</button>
+      <button class="btn btn-secondary" onclick="skipBin()"                        style="width:100%;max-width:320px;">Skip this bin</button>
+    </div>
+
+    <!-- Step 2: Count entry -->
+    <div class="panel-content hidden" id="count-screen">
+
+      <div class="bin-detail-card">
+        <div class="bin-detail-header">
+          <span class="bin-location-big" id="detail-bin">—</span>
+          <span class="badge badge-active">Active</span>
+        </div>
+        <div class="bin-detail-body">
+          <div class="detail-row"><span class="detail-key">Material</span><span class="detail-val mono" id="detail-material">—</span></div>
+          <div class="detail-row"><span class="detail-key">Description</span><span class="detail-val" id="detail-desc">—</span></div>
+          <div class="detail-row"><span class="detail-key">UOM</span><span class="detail-val mono" id="detail-uom">—</span></div>
+          <div class="detail-row"><span class="detail-key">PI Doc</span><span class="detail-val mono" id="detail-pi-doc">—</span></div>
+          <div class="divider"></div>
+          <div class="expected-qty-big" id="detail-expected">—</div>
+          <div class="expected-label">Expected Quantity (SAP)</div>
+        </div>
+      </div>
+
+      <div class="qty-input-wrap">
+        <input type="number" class="qty-input-big" id="actual-qty" placeholder="0" inputmode="numeric" min="0">
+        <div class="qty-label">Actual Counted Quantity</div>
+      </div>
+
+      <div class="flag-toggle" id="flag-toggle" onclick="toggleFlag()">
+        <span class="flag-label">⚠ Flag Discrepancy</span>
+        <div class="toggle-pill"><div class="toggle-thumb"></div></div>
+      </div>
+
+      <div class="field">
+        <label>Note (optional)</label>
+        <textarea id="count-note" placeholder="Damaged units, partial pallets, observations..." rows="3"></textarea>
+      </div>
+
+      <div id="history-section" class="hidden">
+        <div class="card">
+          <div class="card-label">Previous Submissions</div>
+          <div id="history-list"></div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary"   id="submit-btn"      onclick="submitCount()">Submit Count → Post to SAP</button>
+      <button class="btn btn-secondary" id="reopen-skip-btn" onclick="skipBin()">Skip this bin</button>
+
+    </div>
+  </div>
+
+  <!-- SAP Status Overlay -->
+  <div class="sap-overlay hidden" id="sap-overlay">
+    <div class="spinner" style="width:40px;height:40px;border-width:3px;"></div>
+    <div class="sap-status-text" id="sap-status-text">Connecting to SAP...</div>
+    <div class="sap-status-sub"  id="sap-status-sub">Please wait</div>
+    <div class="sap-doc hidden"  id="sap-doc-label"></div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script>
+    const params    = new URLSearchParams(window.location.search);
+    const sessionId = params.get('session');
+
+    let currentProfile = null;
+    let bins           = [];
+    let activeBin      = null;
+    let liveBinData    = null;
+    let activePiDoc    = null;
+    let activeWo       = null;
+    let isFlagged      = false;
+
+    (async () => {
+      const session = await requireAuth();
+      if (!session) return;
+      if (!sessionId) { window.location.href = 'sessions.html'; return; }
+      currentProfile = await getCurrentProfile();
+      await loadSession();
+      await loadBins();
+    })();
+
+    async function loadSession() {
+      const { data, error } = await db.from('session_summary').select('*').eq('id', sessionId).single();
+      if (error || !data) { toast('Session not found', 'error'); return; }
+      document.getElementById('session-progress').textContent = `${data.completed_bins}/${data.total_bins} complete`;
+      document.getElementById('session-reason').textContent   = data.reason;
+    }
+
+    async function loadBins() {
+      const { data, error } = await db.from('session_bins').select('*').eq('session_id', sessionId).order('queued_at');
+      if (error) { toast('Failed to load bins', 'error'); return; }
+      bins = data;
+      renderBins();
+    }
+
+    function renderBins() {
+      const list  = document.getElementById('bin-list');
+      const icons = { queued: '📦', active: '🔵', complete: '✅', skipped: '⏭' };
+
+      if (!bins.length) {
+        list.innerHTML = '<div class="empty"><div class="empty-icon">📦</div>No bins in this session.</div>';
+        return;
+      }
+
+      list.innerHTML = bins.map(b => `
+        <div class="bin-row ${b.status}-bin" onclick="openBin('${b.id}')">
+          <div class="bin-icon bin-icon-${b.status}">${icons[b.status] || '📦'}</div>
+          <div class="bin-info">
+            <div class="bin-location">${b.bin}</div>
+            <div class="bin-material">${b.material_number !== '—' ? b.material_number : 'Data pulled on confirm'}</div>
+          </div>
+          <span class="badge badge-${b.status}">${b.status}</span>
+        </div>`).join('');
+    }
+
+    async function openBin(binId) {
+      activeBin   = bins.find(b => b.id === binId);
+      if (!activeBin) return;
+
+      isFlagged = false;
+      document.getElementById('actual-qty').value  = '';
+      document.getElementById('count-note').value  = '';
+      document.getElementById('flag-toggle').classList.remove('flagged');
+
+      document.getElementById('panel-bin-title').textContent  = activeBin.bin;
+      document.getElementById('panel-bin-status').textContent = activeBin.status.toUpperCase();
+      document.getElementById('confirm-bin-label').textContent = activeBin.bin;
+      document.getElementById('confirm-material-label').textContent =
+        activeBin.material_number !== '—'
+          ? `Material: ${activeBin.material_number}`
+          : 'Tap below to pull live data from SAP';
+
+      if (activeBin.status === 'active') { showCountScreen(); }
+      else                               { showConfirmScreen(); }
+
+      await loadHistory();
+      document.getElementById('count-panel').classList.remove('hidden');
+    }
+
+    function showConfirmScreen() {
+      document.getElementById('confirm-screen').classList.remove('hidden');
+      document.getElementById('count-screen').classList.add('hidden');
+    }
+
+    function showCountScreen() {
+      document.getElementById('confirm-screen').classList.add('hidden');
+      document.getElementById('count-screen').classList.remove('hidden');
+      if (liveBinData) {
+        document.getElementById('detail-bin').textContent      = liveBinData.bin;
+        document.getElementById('detail-material').textContent = liveBinData.material_number;
+        document.getElementById('detail-desc').textContent     = liveBinData.material_desc;
+        document.getElementById('detail-uom').textContent      = liveBinData.uom;
+        document.getElementById('detail-expected').textContent = liveBinData.expected_qty ?? '—';
+        document.getElementById('detail-pi-doc').textContent   = activePiDoc ?? '—';
+      }
+      setTimeout(() => document.getElementById('actual-qty').focus(), 300);
+    }
+
+    function closeCountPanel() {
+      document.getElementById('count-panel').classList.add('hidden');
+      activeBin = null; liveBinData = null; activePiDoc = null; activeWo = null;
+    }
+
+    async function confirmAtBin() {
+      const btn = document.getElementById('confirm-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Connecting...';
+
+      showSapOverlay('Pulling live bin data from SAP...', 'This may take a moment');
+
+      try {
+        updateSapOverlay('Fetching live bin contents...', activeBin.bin);
+        liveBinData = await SAP.getLiveBinContents(activeBin.bin, activeBin.material_number);
+
+        updateSapOverlay('Creating PI document in EWM...', `Mat: ${liveBinData.material_number}`);
+        const piResult = await SAP.createAndActivatePIDoc(liveBinData.bin, liveBinData.material_number, liveBinData.expected_qty);
+        activePiDoc = piResult.pi_doc_number;
+        document.getElementById('sap-doc-label').textContent = `PI Doc: ${activePiDoc}`;
+        document.getElementById('sap-doc-label').classList.remove('hidden');
+
+        updateSapOverlay('Waiting for Warehouse Order...', 'EWM is generating WO from PI doc');
+        const woResult = await SAP.waitForWarehouseOrder(activePiDoc);
+        activeWo = woResult.wo_number;
+
+        await db.from('session_bins').update({ status: 'active' }).eq('id', activeBin.id);
+        activeBin.status = 'active';
+
+        hideSapOverlay();
+        showCountScreen();
+        toast('PI doc active · WO generated', 'success');
+
+      } catch (err) {
+        hideSapOverlay();
+        toast(`SAP error: ${err.message}`, 'error');
+        btn.disabled = false;
+        btn.innerHTML = "I'm at this bin";
+      }
+    }
+
+    async function submitCount() {
+      const actualQty = parseFloat(document.getElementById('actual-qty').value);
+      if (isNaN(actualQty) || actualQty < 0) { toast('Enter a valid quantity', 'error'); return; }
+
+      const note = document.getElementById('count-note').value.trim();
+
+      const { data: existingEntries } = await db
+        .from('count_entries')
+        .select('attempt_number')
+        .eq('session_bin_id', activeBin.id)
+        .order('attempt_number', { ascending: false })
+        .limit(1);
+
+      const attemptNumber = existingEntries?.length ? existingEntries[0].attempt_number + 1 : 1;
+
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Posting to SAP...';
+
+      showSapOverlay('Confirming Warehouse Order...', `WO: ${activeWo}`);
+
+      try {
+        updateSapOverlay('Posting PI document...', `PI: ${activePiDoc} · Qty: ${actualQty}`);
+        await SAP.confirmAndPost(activeWo, activePiDoc, actualQty);
+
+        const { error: entryErr } = await db.from('count_entries').insert({
+          session_bin_id: activeBin.id,
+          counted_by:     currentProfile.id,
+          material_desc:  liveBinData?.material_desc,
+          expected_qty:   liveBinData?.expected_qty,
+          uom:            liveBinData?.uom,
+          actual_qty:     actualQty,
+          flagged:        isFlagged,
+          note:           note || null,
+          attempt_number: attemptNumber,
+          pi_doc_number:  activePiDoc,
+          wo_number:      activeWo,
+          sap_status:     'posted',
+        });
+
+        if (entryErr) throw new Error('Supabase save failed');
+
+        await db.from('session_bins').update({ status: 'complete' }).eq('id', activeBin.id);
+
+        hideSapOverlay();
+        toast(`Count posted · PI ${activePiDoc}`, 'success');
+        closeCountPanel();
+        await loadBins();
+        await loadSession();
+
+      } catch (err) {
+        await db.from('count_entries').insert({
+          session_bin_id: activeBin.id,
+          counted_by:     currentProfile.id,
+          actual_qty:     actualQty,
+          flagged:        isFlagged,
+          note:           note || null,
+          attempt_number: attemptNumber,
+          pi_doc_number:  activePiDoc,
+          wo_number:      activeWo,
+          sap_status:     'failed',
+          sap_error:      err.message,
+        });
+
+        hideSapOverlay();
+        toast(`SAP post failed · ${err.message}`, 'error');
+        btn.disabled = false;
+        btn.innerHTML = 'Submit Count → Post to SAP';
+      }
+    }
+
+    async function skipBin() {
+      if (!activeBin) return;
+      await db.from('session_bins').update({ status: 'skipped' }).eq('id', activeBin.id);
+      toast('Bin skipped', 'info');
+      closeCountPanel();
+      await loadBins();
+    }
+
+    async function loadHistory() {
+      if (!activeBin) return;
+      const { data } = await db
+        .from('count_entries')
+        .select('*')
+        .eq('session_bin_id', activeBin.id)
+        .order('attempt_number');
+
+      const section = document.getElementById('history-section');
+      const list    = document.getElementById('history-list');
+
+      if (!data?.length) { section.classList.add('hidden'); return; }
+
+      section.classList.remove('hidden');
+      list.innerHTML = data.map(e => `
+        <div class="history-row">
+          <span style="color:var(--text-2);">Attempt #${e.attempt_number}</span>
+          <span class="mono" style="color:var(--text);">Qty: ${e.actual_qty}</span>
+          <span class="badge badge-${e.sap_status}">${e.sap_status}</span>
+        </div>`).join('');
+    }
+
+    function toggleFlag() {
+      isFlagged = !isFlagged;
+      document.getElementById('flag-toggle').classList.toggle('flagged', isFlagged);
+    }
+
+    function showSapOverlay(text, sub) {
+      document.getElementById('sap-status-text').textContent = text;
+      document.getElementById('sap-status-sub').textContent  = sub;
+      document.getElementById('sap-doc-label').classList.add('hidden');
+      document.getElementById('sap-overlay').classList.remove('hidden');
+    }
+
+    function updateSapOverlay(text, sub) {
+      document.getElementById('sap-status-text').textContent = text;
+      document.getElementById('sap-status-sub').textContent  = sub;
+    }
+
+    function hideSapOverlay() {
+      document.getElementById('sap-overlay').classList.add('hidden');
+    }
+
+    function goBack() { window.location.href = 'sessions.html'; }
+  </script>
+</body>
+</html>
