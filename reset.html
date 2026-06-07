@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Cycle Count — Set Password</title>
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    body {
+      display: flex; align-items: center;
+      justify-content: center; min-height: 100dvh; padding: 24px;
+    }
+    .wrap {
+      width: 100%; max-width: 380px;
+      display: flex; flex-direction: column; gap: 24px;
+    }
+    .brand { text-align: center; }
+    .brand-eyebrow {
+      font-family: var(--font-mono); font-size: 0.65rem;
+      color: var(--green); letter-spacing: 0.2em;
+      text-transform: uppercase; margin-bottom: 8px;
+    }
+    .brand-name {
+      font-family: var(--font-display); font-size: 2rem;
+      font-weight: 700; letter-spacing: 0.06em;
+    }
+    .brand-sub {
+      font-family: var(--font-mono); font-size: 0.7rem;
+      color: var(--text-3); letter-spacing: 0.08em; margin-top: 4px;
+    }
+    .card {
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: var(--r-lg); padding: 24px;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="brand">
+      <div class="brand-eyebrow">Novus Foods · Plant 1730</div>
+      <div class="brand-name">SET PASSWORD</div>
+      <div class="brand-sub">Create your account password</div>
+    </div>
+
+    <div class="card">
+      <div class="field">
+        <label>New Password <span class="required">*</span></label>
+        <input type="password" id="password" placeholder="min. 8 characters">
+      </div>
+      <div class="field">
+        <label>Confirm Password <span class="required">*</span></label>
+        <input type="password" id="confirm-password" placeholder="repeat password">
+      </div>
+      <div id="error-msg" class="error-box hidden"></div>
+      <button class="btn btn-primary" id="submit-btn" onclick="setPassword()">Set Password & Sign In</button>
+    </div>
+
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/app.js"></script>
+  <script>
+    // Supabase automatically picks up the access token from the URL hash
+    (async () => {
+      const { data: { session } } = await db.auth.getSession();
+      if (!session) {
+        // No token in URL — send to login
+        document.getElementById('error-msg').textContent = 'Invalid or expired link. Please request a new invite.';
+        document.getElementById('error-msg').classList.remove('hidden');
+        document.getElementById('submit-btn').disabled = true;
+      }
+    })();
+
+    async function setPassword() {
+      const password = document.getElementById('password').value;
+      const confirm  = document.getElementById('confirm-password').value;
+      const errEl    = document.getElementById('error-msg');
+      const btn      = document.getElementById('submit-btn');
+
+      errEl.classList.add('hidden');
+
+      if (!password || !confirm) {
+        errEl.textContent = 'Both fields are required.';
+        errEl.classList.remove('hidden'); return;
+      }
+      if (password.length < 8) {
+        errEl.textContent = 'Password must be at least 8 characters.';
+        errEl.classList.remove('hidden'); return;
+      }
+      if (password !== confirm) {
+        errEl.textContent = 'Passwords do not match.';
+        errEl.classList.remove('hidden'); return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> Saving...';
+
+      const { error } = await db.auth.updateUser({ password });
+
+      if (error) {
+        errEl.textContent = error.message;
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerHTML = 'Set Password & Sign In';
+        return;
+      }
+
+      // Password set — go straight to sessions
+      window.location.href = 'sessions.html';
+    }
+  </script>
+</body>
+</html>
